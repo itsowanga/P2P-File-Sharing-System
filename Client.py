@@ -5,6 +5,7 @@ import threading
 import json
 import os
 import time
+from HashUtils import compute_file_hash, verify_file_integrity
 
 
 TRACKER_IP = '127.0.0.1'
@@ -17,15 +18,27 @@ boolSeeder = False  # Boolean variable that keeps record of whether the state ch
 heartbeat_started = False  # Flag to ensure heartbeat thread is started only once
 
 def registerSeeder(filename):
-    '''Function that registers the seeder to the tracker.'''
+    '''Function that registers the seeder to the tracker with file hash.'''
     global heartbeat_started
     try:
+        # Compute file hash
+        file_hash = compute_file_hash(filename)
+        if file_hash is None:
+            print('\033[31m'+f"Error: Cannot compute hash for {filename}. File may not exist."+'\033[0m')
+            return
+        
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)  # 5 second timeout
-        message = json.dumps({"action": "REGISTER", "filename": filename, "port": PEER_PORT}).encode()
+        message = json.dumps({
+            "action": "REGISTER", 
+            "filename": filename, 
+            "port": PEER_PORT,
+            "file_hash": file_hash
+        }).encode()
         sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
         sock.close()
         print('\033[32m'+f"Registered {filename} with tracker on port {PEER_PORT}."+'\033[0m')
+        print('\033[32m'+f"File Hash (SHA256): {file_hash[:16]}..."+'\033[0m')
         # Start heartbeat thread only once
         if not heartbeat_started:
             heartbeat_started = True
@@ -91,7 +104,7 @@ def downloadInterface():
     loading_root.mainloop()
 
 def requestHosts(filename):
-    '''Function that makes a request to Tracker for seeders hosting a particular file.'''
+    '''Function that makes a request to Tracker for seeders hosting a particular file with their hashes.'''
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)  # 5 second timeout
@@ -108,16 +121,21 @@ def requestHosts(filename):
         return []
 
 def handleConnection(conn, addr):
-    '''Handles request for a certain file and sends chunks to the requested peer'''
+    '''Handles request for a certain file and sends hash + file chunks to the requested peer'''
     try:
         filename = conn.recv(BUFFER_SIZE).decode()
         if os.path.exists(filename):
+            # Compute and send file hash first
+            file_hash = compute_file_hash(filename)
+            conn.send(json.dumps({"hash": file_hash, "status": "success"}).encode())
+            
+            # Send file in chunks
             with open(filename, 'rb') as f:
                 while chunk := f.read(BUFFER_SIZE):
                     conn.send(chunk)
             print(f"Sent {filename} to {addr}")
         else:
-            conn.send('\033[31m'+b"ERROR: File not found"+'\033[0m')
+            conn.send(json.dumps({"hash": "", "status": "error", "message": "File not found"}).encode())
     finally:
         conn.close()
 
@@ -140,7 +158,7 @@ def startPeer():
         print('\033[31m'+"Peer server closed."+'\033[0m')
 
 def downloadFile(filename):
-    '''Function to download a particular file.'''
+    '''Function to download a particular file with integrity verification.'''
     global boolSeeder
     peers = requestHosts(filename)
     if not peers:
@@ -148,24 +166,62 @@ def downloadFile(filename):
         return False
     
     downloadInterface() # Simulate download
-    for peer_ip, peer_port in peers:
+    for peer_info in peers:
         try:
+            # Handle both old format (tuple) and new format (dict)
+            if isinstance(peer_info, dict):
+                peer_ip = peer_info.get("ip")
+                peer_port = peer_info.get("port")
+                expected_hash = peer_info.get("hash")
+            else:
+                # Fallback for old format
+                peer_ip, peer_port = peer_info
+                expected_hash = None
+            
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((peer_ip, peer_port))
             sock.send(filename.encode())
             
+            # Receive hash information first
+            hash_data = json.loads(sock.recv(BUFFER_SIZE).decode())
+            
+            if hash_data.get("status") == "error":
+                print('\033[31m'+f"\nError from {peer_ip}:{peer_port}: {hash_data.get('message')}"+'\033[0m')
+                sock.close()
+                continue
+            
+            received_hash = hash_data.get("hash")
             new_filename = "[download]"+f"{filename}"
+            
+            # Download file
             with open(new_filename, 'wb') as f:
                 while chunk := sock.recv(BUFFER_SIZE):
                     f.write(chunk)
-            print('\033[32m'+f"\nDownloaded {filename} from {peer_ip}:{peer_port}"+'\033[0m')
             sock.close()
             
+            print('\033[32m'+f"\nDownloaded {filename} from {peer_ip}:{peer_port}"+'\033[0m')
             
-            print('\033[32m'+"Download complete. Becoming a seeder..."+'\033[0m')
-            registerSeeder(new_filename)
-            boolSeeder = True  
-            return True
+            # Verify file integrity
+            if received_hash and verify_file_integrity(new_filename, received_hash):
+                print('\033[32m'+"Download complete. Becoming a seeder..."+'\033[0m')
+                registerSeeder(new_filename)
+                boolSeeder = True  
+                return True
+            elif not received_hash:
+                print('\033[33m'+"Warning: No hash provided by seeder. Proceeding without integrity check."+'\033[0m')
+                print('\033[32m'+"Download complete. Becoming a seeder..."+'\033[0m')
+                registerSeeder(new_filename)
+                boolSeeder = True
+                return True
+            else:
+                # Hash verification failed
+                print('\033[31m'+"Integrity check failed. File may be corrupted. Trying next seeder..."+'\033[0m')
+                try:
+                    os.remove(new_filename)
+                except:
+                    pass
+                continue
+                
         except Exception as e:
             print('\033[31m'+f"\nFailed to download from {peer_ip}:{peer_port} - {e}"+ '\033[0m')
     
@@ -173,19 +229,46 @@ def downloadFile(filename):
     return False
 
 def seederList(filename):
-    '''Returns a list of seeders hosting a particular file.'''
+    '''Returns a list of seeders hosting a particular file with hashes.'''
     peers = requestHosts(filename)
     if peers:
         print(f"\nSeeders hosting '{filename}':")
-        for ip, port in peers:
-            print('\033[32m'+f"- {ip}:{port}"+'\033[0m')
+        for peer_info in peers:
+            if isinstance(peer_info, dict):
+                ip = peer_info.get("ip")
+                port = peer_info.get("port")
+                file_hash = peer_info.get("hash")
+                print('\033[32m'+f"- {ip}:{port}"+'\033[0m')
+                if file_hash:
+                    print(f"  Hash (SHA256): {file_hash[:16]}...")
+            else:
+                # Fallback for old format
+                print('\033[32m'+f"- {peer_info[0]}:{peer_info[1]}"+'\033[0m')
     else:
         print('\033[31m'+f"\nNo seeders found for '{filename}'."+'\033[0m')
+
+def verifyDownloadedFile():
+    '''Manually verify the integrity of a downloaded file.'''
+    filename = input("\nEnter the filename to verify (e.g., [download]filename): ").strip()
+    if not os.path.exists(filename):
+        print('\033[31m'+f"File not found: {filename}"+'\033[0m')
+        return
+    
+    expected_hash = input("Enter the expected SHA256 hash: ").strip()
+    if not expected_hash:
+        print('\033[31m'+"Hash cannot be empty."+'\033[0m')
+        return
+    
+    if verify_file_integrity(filename, expected_hash):
+        print('\033[32m'+"✓ File is intact and has not been modified."+'\033[0m')
+    else:
+        print('\033[31m'+"✗ File integrity verification failed!"+'\033[0m')
+        print('\033[33m'+"The file may have been corrupted or modified."+'\033[0m')
 
 def seederMenu():
     '''Main menu prompt after state change has occured(Leecher -> Seeder)'''
     while True:
-        action = input("\nSeeder Menu:\n1. Seed another file\n2. View active seeding files\n3. Exit\n> ").strip()
+        action = input("\nSeeder Menu:\n1. Seed another file\n2. View active seeding files\n3. Verify downloaded file\n4. Exit\n> ").strip()
         
         if action == "1":
             filename = input("\nEnter filename to seed: ").strip()
@@ -204,16 +287,19 @@ def seederMenu():
                     print('\033[32m'+f"- {filename}"+'\033[0m')
         
         elif action == "3":
+            verifyDownloadedFile()
+        
+        elif action == "4":
             return  
         
         else:
-            print('\033[31m'+"\nInvalid option. Please choose 1, 2, or 3."+'\033[0m')
+            print('\033[31m'+"\nInvalid option. Please choose 1, 2, 3, or 4."+'\033[0m')
 
 def leecherMenu():
     '''Main menu prompt for leecher prior to becoming a seeder.'''
     global boolSeeder
     while True:
-        option = input("\nLeecher Menu: \n1. Download file \n2. Get list of seeders \n3. Back \n> ").strip()
+        option = input("\nLeecher Menu: \n1. Download file \n2. Get list of seeders \n3. Verify downloaded file \n4. Back \n> ").strip()
         
         if option == "1":
             filename = input("\nEnter filename to download: ").strip()
@@ -228,10 +314,13 @@ def leecherMenu():
             seederList(filename)
         
         elif option == "3":
+            verifyDownloadedFile()
+        
+        elif option == "4":
             return  
         
         else:
-            print('\033[31m'+"\nInvalid option. Please choose 1, 2, or 3."+'\033[0m')
+            print('\033[31m'+"\nInvalid option. Please choose 1, 2, 3, or 4."+'\033[0m')
 
 if __name__ == "__main__":
     
