@@ -7,7 +7,7 @@ TRACKER_HOST = '0.0.0.0'
 TRACKER_PORT = 5000
 PEER_TIMEOUT = 30
 peers = {}  # { "filename": [ (PEER__IP, PEER_PORT)] }
-peer_heartbeat = {}
+peer_heartbeat = {}  # { (peer_ip, peer_port): last_heartbeat_time }
 
 def handlePeer(sock, addr):
     while True:
@@ -25,6 +25,8 @@ def handlePeer(sock, addr):
                     peers[filename] = []
                 if (peer_ip, peer_port) not in peers[filename]:
                     peers[filename].append((peer_ip, peer_port))
+                    # Track when this peer registered (use as initial heartbeat)
+                    peer_heartbeat[(peer_ip, peer_port)] = time.time()
                 print('\033[32m'+f"Registered {peer_ip}:{peer_port} for {filename}"+'\033[0m')
 
             elif action == "REQUEST":
@@ -39,7 +41,7 @@ def handlePeer(sock, addr):
                 '''Periodically sends out alerts of heartbeat meassages.'''
                 peer_ip = peer_addr[0]
                 peer_port = message.get("port")
-                peer_heartbeat[peer_ip] = peer_port
+                peer_heartbeat[(peer_ip, peer_port)] = time.time()
                 print('\033[32m'+f"Received heartbeat from peer {peer_ip}:{peer_port}"+'\033[0m')
 
             elif action == "EXIT":
@@ -49,17 +51,46 @@ def handlePeer(sock, addr):
                 for filename in list(peers.keys()):
                     peers[filename] = [(ip, port) for ip, port in peers[filename] if (ip, port) != (peer_ip, peer_port)]
                     if not peers[filename]:  
-                     del peers[filename]
-    
+                        del peers[filename]
                 
-                if peer_ip in peer_heartbeat:
-                    del peer_heartbeat[peer_ip]
-
+                if (peer_ip, peer_port) in peer_heartbeat:
+                    del peer_heartbeat[(peer_ip, peer_port)]
 
                 print('\033[31m'+f"Peer {peer_ip}:{peer_port} disconnected."+'\033[0m')
 
         except Exception as e:
-            print('\033[31m'+f"Error handling peer {addr}: {e}"+'\033[0m')
+            print('\033[31m'+f"Error handling peer: {e}"+'\033[0m')
+
+def check_peer_timeout():
+    '''Periodically check for inactive peers and remove them.'''
+    while True:
+        try:
+            time.sleep(5)  # Check every 5 seconds
+            current_time = time.time()
+            inactive_peers = []
+            
+            # Find inactive peers
+            for (peer_ip, peer_port), last_heartbeat in list(peer_heartbeat.items()):
+                if current_time - last_heartbeat > PEER_TIMEOUT:
+                    inactive_peers.append((peer_ip, peer_port))
+            
+            # Remove inactive peers from tracking
+            for peer_ip, peer_port in inactive_peers:
+                # Remove from all file lists
+                for filename in list(peers.keys()):
+                    peers[filename] = [(ip, port) for ip, port in peers[filename] 
+                                      if (ip, port) != (peer_ip, peer_port)]
+                    if not peers[filename]:
+                        del peers[filename]
+                
+                # Remove from heartbeat tracking
+                if (peer_ip, peer_port) in peer_heartbeat:
+                    del peer_heartbeat[(peer_ip, peer_port)]
+                
+                print('\033[31m'+f"Peer {peer_ip}:{peer_port} timed out and was removed."+'\033[0m')
+        
+        except Exception as e:
+            print('\033[31m'+f"Error in timeout check: {e}"+'\033[0m')
 
 def start_tracker():
     '''Start the tracker main thread'''

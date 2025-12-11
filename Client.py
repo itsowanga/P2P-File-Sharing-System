@@ -14,29 +14,57 @@ BUFFER_SIZE = 1024
 HEARTBEAT_INTERVAL = 10 
 running = True  
 boolSeeder = False  # Boolean variable that keeps record of whether the state change from leecher to seeder has occured.
+heartbeat_started = False  # Flag to ensure heartbeat thread is started only once
 
 def registerSeeder(filename):
     '''Function that registers the seeder to the tracker.'''
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    message = json.dumps({"action": "REGISTER", "filename": filename, "port": PEER_PORT}).encode()
-    sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
-    sock.close()
-    print('\033[32m'+f"Registered {filename} with tracker on port {PEER_PORT}."+'\033[0m')
-    threading.Thread(target=heartbeatMessage, daemon=True).start()
+    global heartbeat_started
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5)  # 5 second timeout
+        message = json.dumps({"action": "REGISTER", "filename": filename, "port": PEER_PORT}).encode()
+        sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
+        sock.close()
+        print('\033[32m'+f"Registered {filename} with tracker on port {PEER_PORT}."+'\033[0m')
+        # Start heartbeat thread only once
+        if not heartbeat_started:
+            heartbeat_started = True
+            threading.Thread(target=heartbeatMessage, daemon=True).start()
+    except socket.timeout:
+        print('\033[31m'+"Error: Failed to register with tracker (timeout). Tracker may be unreachable."+'\033[0m')
+    except Exception as e:
+        print('\033[31m'+f"Error registering with tracker: {e}"+'\033[0m')
 
 def heartbeatMessage():
     '''Function responsible for send hearbeat messages to the tracker, to indicate the 'alive' state.'''
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    while running: # As long as the peer is running, the messages have to be sent.
-        message = json.dumps({"action": "HEARTBEAT", "port": PEER_PORT}).encode()
-        sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
-        time.sleep(HEARTBEAT_INTERVAL)
+    sock.settimeout(5)  # 5 second timeout for each send
+    try:
+        while running: # As long as the peer is running, the messages have to be sent.
+            try:
+                message = json.dumps({"action": "HEARTBEAT", "port": PEER_PORT}).encode()
+                sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
+            except socket.timeout:
+                print('\033[31m'+"Heartbeat timeout - tracker may be unreachable"+'\033[0m')
+            except Exception as e:
+                print('\033[31m'+f"Error sending heartbeat: {e}"+'\033[0m')
+            time.sleep(HEARTBEAT_INTERVAL)
+    finally:
+        sock.close()
+        print('\033[31m'+"Heartbeat thread closed."+'\033[0m')
 
 def exit():
     '''Function to quit the program thus disconnecting the peer.'''
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    message= json.dumps({"action": "EXIT", "port": PEER_PORT}).encode()
-    sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5)  # 5 second timeout
+        message = json.dumps({"action": "EXIT", "port": PEER_PORT}).encode()
+        sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
+        sock.close()
+    except socket.timeout:
+        print('\033[31m'+"Warning: Failed to notify tracker of exit (timeout)."+'\033[0m')
+    except Exception as e:
+        print('\033[31m'+f"Warning: Error notifying tracker of exit: {e}"+'\033[0m')
 
 
 def downloadInterface():
@@ -64,12 +92,20 @@ def downloadInterface():
 
 def requestHosts(filename):
     '''Function that makes a request to Tracker for seeders hosting a particular file.'''
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    message = json.dumps({"action": "REQUEST", "filename": filename}).encode()
-    sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
-    data, _ = sock.recvfrom(BUFFER_SIZE)
-    sock.close()
-    return json.loads(data.decode())
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5)  # 5 second timeout
+        message = json.dumps({"action": "REQUEST", "filename": filename}).encode()
+        sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
+        data, _ = sock.recvfrom(BUFFER_SIZE)
+        sock.close()
+        return json.loads(data.decode())
+    except socket.timeout:
+        print('\033[31m'+"Error: Tracker request timed out. Tracker may be unreachable."+'\033[0m')
+        return []
+    except Exception as e:
+        print('\033[31m'+f"Error requesting hosts from tracker: {e}"+'\033[0m')
+        return []
 
 def handleConnection(conn, addr):
     '''Handles request for a certain file and sends chunks to the requested peer'''
@@ -89,14 +125,19 @@ def startPeer():
     '''Start the peer thread so it can handle connections.'''
     global PEER_PORT
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', 0))  
     PEER_PORT = server.getsockname()[1]
     server.listen(5)
     print('\033[33m'+f"Peer listening on port {PEER_PORT}"+'\033[0m')
     
-    while running:
-        conn, addr = server.accept()
-        threading.Thread(target=handleConnection, args=(conn, addr)).start()
+    try:
+        while running:
+            conn, addr = server.accept()
+            threading.Thread(target=handleConnection, args=(conn, addr)).start()
+    finally:
+        server.close()
+        print('\033[31m'+"Peer server closed."+'\033[0m')
 
 def downloadFile(filename):
     '''Function to download a particular file.'''
