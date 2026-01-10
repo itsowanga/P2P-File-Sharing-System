@@ -50,12 +50,29 @@ The tracker will start on `127.0.0.1:5000` and manage all peer connections.
 
 ### 2. Start Client(s)
 
-Open a new terminal for each client you want to run:
+**Option A: GUI Client (Recommended)**
+```bash
+python3 ClientGUI.py
+```
+This launches the graphical interface with tabbed navigation for seeding, downloading, and file verification.
+
+**Option B: Command Line Client**
 ```bash
 python3 Client.py
 ```
+This runs the text-based interface in the terminal.
 
 Each client will automatically bind to an available port and can act as both a leecher and seeder.
+
+## GUI Features
+
+The graphical client (`ClientGUI.py`) provides:
+
+- **📤 Seeder Tab**: Browse and share files, view active seeds with hash information
+- **📥 Download Tab**: Search for files, view seeders, download with progress bar
+- **✅ Verify Tab**: Manually verify file integrity, compute SHA256 hashes
+- **Activity Log**: Real-time color-coded log of all operations
+- **Status Bar**: Current connection status and peer port information
 
 ## Usage Guide
 

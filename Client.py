@@ -123,21 +123,33 @@ def requestHosts(filename):
 def handleConnection(conn, addr):
     '''Handles request for a certain file and sends hash + file chunks to the requested peer'''
     try:
+        conn.settimeout(30)  # 30 second timeout
         filename = conn.recv(BUFFER_SIZE).decode()
         if os.path.exists(filename):
             # Compute and send file hash first
             file_hash = compute_file_hash(filename)
             conn.send(json.dumps({"hash": file_hash, "status": "success"}).encode())
             
+            # Small delay to ensure hash is received separately
+            time.sleep(0.1)
+            
             # Send file in chunks
             with open(filename, 'rb') as f:
                 while chunk := f.read(BUFFER_SIZE):
                     conn.send(chunk)
+            
+            # Shutdown socket to signal end of data
+            conn.shutdown(socket.SHUT_WR)
             print(f"Sent {filename} to {addr}")
         else:
             conn.send(json.dumps({"hash": "", "status": "error", "message": "File not found"}).encode())
+    except Exception as e:
+        print('\033[31m'+f"Error handling connection: {e}"+'\033[0m')
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except:
+            pass
 
 def startPeer():
     '''Start the peer thread so it can handle connections.'''
@@ -179,6 +191,7 @@ def downloadFile(filename):
                 expected_hash = None
             
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(30)  # 30 second connection timeout
             sock.connect((peer_ip, peer_port))
             sock.send(filename.encode())
             
@@ -193,10 +206,17 @@ def downloadFile(filename):
             received_hash = hash_data.get("hash")
             new_filename = "[download]"+f"{filename}"
             
-            # Download file
+            # Download file with timeout
+            sock.settimeout(5)  # 5 second timeout for each chunk
             with open(new_filename, 'wb') as f:
-                while chunk := sock.recv(BUFFER_SIZE):
-                    f.write(chunk)
+                while True:
+                    try:
+                        chunk = sock.recv(BUFFER_SIZE)
+                        if not chunk:
+                            break  # Connection closed by seeder
+                        f.write(chunk)
+                    except socket.timeout:
+                        break  # No more data
             sock.close()
             
             print('\033[32m'+f"\nDownloaded {filename} from {peer_ip}:{peer_port}"+'\033[0m')
