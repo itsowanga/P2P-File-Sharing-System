@@ -1,8 +1,7 @@
 """
-P2P File Sharing System Configuration
+Configuration for the tracker, CLI/GUI clients, and protocol constants.
 
-This module contains all configuration constants and settings for the P2P system.
-Modify these values to customize the behavior of the tracker and clients.
+Values can be overridden via environment variables where noted on each dataclass.
 """
 
 import os

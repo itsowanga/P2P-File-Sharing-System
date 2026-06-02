@@ -1,8 +1,8 @@
 # Contributing to P2P File Sharing System
 
-Thank you for your interest in contributing to this project! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing. This document describes how to report issues, propose changes, and submit pull requests.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
@@ -12,81 +12,73 @@ Thank you for your interest in contributing to this project! This document provi
 - [Commit Guidelines](#commit-guidelines)
 - [Pull Request Process](#pull-request-process)
 
-## 📜 Code of Conduct
+## Code of Conduct
 
-This project adheres to a code of conduct. By participating, you are expected to uphold this code:
+By participating in this project, you agree to:
 
 - Be respectful and inclusive
-- Welcome newcomers and help them get started
-- Focus on constructive criticism
-- Accept feedback gracefully
+- Help newcomers get started
+- Provide constructive feedback
+- Accept feedback on your contributions
 
-## 🚀 Getting Started
+## Getting Started
 
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/P2P-File-Sharing-System.git`
-3. Create a new branch: `git checkout -b feature/your-feature-name`
-4. Make your changes
-5. Test your changes
-6. Commit and push
-7. Open a Pull Request
+3. Create a branch: `git checkout -b feature/your-feature-name`
+4. Make and test your changes
+5. Commit and push to your fork
+6. Open a pull request
 
-## 💡 How to Contribute
+## How to Contribute
 
 ### Reporting Bugs
 
-- Use the GitHub Issues page
-- Check if the issue already exists
-- Include a clear title and description
-- Provide steps to reproduce
-- Include system information (OS, Python version)
+- Open an issue on GitHub
+- Search existing issues first
+- Include a clear title, steps to reproduce, and expected vs. actual behavior
+- Note your OS and Python version
 
 ### Suggesting Features
 
-- Open an issue with the "enhancement" label
-- Clearly describe the feature and its benefits
-- Provide use cases if possible
+- Open an issue with the enhancement label
+- Describe the feature, use cases, and expected behavior
 
 ### Code Contributions
 
-- Fix bugs
-- Implement new features
-- Improve documentation
-- Write tests
-- Optimize performance
+- Bug fixes
+- New features
+- Documentation improvements
+- Tests and performance improvements
 
-## 🛠️ Development Setup
+## Development Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/itsowanga/P2P-File-Sharing-System.git
 cd P2P-File-Sharing-System
 
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install development dependencies (if any)
 pip install -e ".[dev]"
 
-# Run tests
 python -m pytest tests/
 ```
 
-## 📝 Coding Standards
+## Coding Standards
 
 ### Python Style
 
-- Follow [PEP 8](https://pep8.org/) style guidelines
-- Use meaningful variable and function names
-- Maximum line length: 100 characters
-- Use type hints where appropriate
+- Follow [PEP 8](https://pep8.org/)
+- Use clear names for variables and functions
+- Prefer a maximum line length of 100 characters
+- Use type hints where they add clarity
 
 ### Documentation
 
-- Add docstrings to all public functions and classes
-- Use Google-style docstrings format
-- Keep comments up to date with code changes
+- Add docstrings to public functions and classes
+- Use Google-style docstrings
+- Keep comments aligned with the current implementation
 
 ### Example
 
@@ -94,21 +86,18 @@ python -m pytest tests/
 def compute_file_hash(filename: str, algorithm: str = "sha256") -> Optional[str]:
     """
     Compute the hash of a file using the specified algorithm.
-    
+
     Args:
         filename: Path to the file to hash.
-        algorithm: Hashing algorithm to use (default: 'sha256').
-    
+        algorithm: Hashing algorithm (default: sha256).
+
     Returns:
-        Hexadecimal hash string, or None if the file doesn't exist.
-    
-    Raises:
-        IOError: If the file cannot be read.
+        Hexadecimal hash string, or None if the file does not exist.
     """
     ...
 ```
 
-## 📌 Commit Guidelines
+## Commit Guidelines
 
 ### Commit Message Format
 
@@ -124,40 +113,40 @@ def compute_file_hash(filename: str, algorithm: str = "sha256") -> Optional[str]
 
 - `feat`: New feature
 - `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
+- `docs`: Documentation
+- `style`: Formatting only
+- `refactor`: Code change without behavior change
+- `test`: Tests
+- `chore`: Maintenance
 
 ### Examples
 
 ```
-feat(gui): add file verification progress bar
+feat(gui): add verification progress indicator
 
-fix(tracker): resolve peer timeout calculation bug
+fix(tracker): correct peer timeout removal
 
-docs(readme): update installation instructions
+docs(readme): update installation steps
 ```
 
-## 🔄 Pull Request Process
+## Pull Request Process
 
-1. **Update Documentation**: Update README.md if needed
-2. **Add Tests**: Include tests for new functionality
-3. **Follow Style Guide**: Ensure code follows project standards
-4. **Single Purpose**: Each PR should address one concern
-5. **Clear Description**: Explain what and why
+1. Update documentation when behavior or setup changes
+2. Add or update tests for new behavior
+3. Follow the coding standards above
+4. Keep each pull request focused on one change
+5. Describe what changed and why in the PR description
 
 ### PR Checklist
 
 - [ ] Code follows project style guidelines
 - [ ] Self-review completed
-- [ ] Comments added for complex logic
-- [ ] Documentation updated
+- [ ] Comments added for non-obvious logic
+- [ ] Documentation updated as needed
 - [ ] No new warnings introduced
 - [ ] Tests pass locally
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 P2P-File-Sharing-System/
@@ -165,20 +154,17 @@ P2P-File-Sharing-System/
 ├── ClientGUI.py        # GUI client
 ├── Tracker.py          # Tracker server
 ├── HashUtils.py        # File hashing utilities
-├── config.py           # Configuration settings
-├── README.md           # Project documentation
-├── CONTRIBUTING.md     # This file
-├── LICENSE             # MIT License
-├── pyproject.toml      # Project metadata
-├── .gitignore          # Git ignore rules
-└── tests/              # Test files
-    └── ...
+├── config.py           # Configuration
+├── README.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── pyproject.toml
+├── .gitignore
+└── tests/
 ```
 
-## ❓ Questions?
+## Questions
 
-Feel free to open an issue for any questions or concerns. We're happy to help!
+Open an issue if you need clarification on contributing or project setup.
 
----
-
-Thank you for contributing! 🎉
+Thank you for contributing.

@@ -1,17 +1,19 @@
+"""SHA256 hashing and integrity verification for shared files."""
+
 import hashlib
 import os
 
 
 def compute_file_hash(filename, algorithm='sha256'):
     """
-    Compute the hash of a file using the specified algorithm.
-    
+    Compute the hash of a file.
+
     Args:
-        filename (str): Path to the file to hash
-        algorithm (str): Hashing algorithm to use (default: 'sha256')
-    
+        filename: Path to the file.
+        algorithm: Hash algorithm name (default: sha256).
+
     Returns:
-        str: Hexadecimal hash string of the file, or None if file doesn't exist
+        Hex digest string, or None if the file does not exist.
     """
     if not os.path.exists(filename):
         return None
@@ -20,7 +22,7 @@ def compute_file_hash(filename, algorithm='sha256'):
     
     try:
         with open(filename, 'rb') as f:
-            # Read file in chunks to handle large files
+            # Read in chunks to limit memory use
             while chunk := f.read(8192):
                 hash_obj.update(chunk)
         return hash_obj.hexdigest()
@@ -31,15 +33,15 @@ def compute_file_hash(filename, algorithm='sha256'):
 
 def verify_file_integrity(filename, expected_hash, algorithm='sha256'):
     """
-    Verify the integrity of a downloaded file by comparing its hash with the expected hash.
-    
+    Compare the file hash to the expected value.
+
     Args:
-        filename (str): Path to the file to verify
-        expected_hash (str): Expected hash value (hexadecimal string)
-        algorithm (str): Hashing algorithm used (default: 'sha256')
-    
+        filename: Path to the file.
+        expected_hash: Expected hex digest.
+        algorithm: Hash algorithm name (default: sha256).
+
     Returns:
-        bool: True if hashes match (file is intact), False otherwise
+        True if the hashes match, False otherwise.
     """
     if not os.path.exists(filename):
         print('\033[31m'+f"Error: File {filename} not found."+'\033[0m')
@@ -62,13 +64,13 @@ def verify_file_integrity(filename, expected_hash, algorithm='sha256'):
 
 def get_file_info(filename):
     """
-    Get file information including name, size, and hash.
-    
+    Return filename, size, and hash for a file.
+
     Args:
-        filename (str): Path to the file
-    
+        filename: Path to the file.
+
     Returns:
-        dict: Dictionary containing filename, size, and hash, or None if file doesn't exist
+        Dict with filename, size, hash, and algorithm keys, or None if missing.
     """
     if not os.path.exists(filename):
         return None

@@ -1,3 +1,5 @@
+"""Command-line client for the P2P file sharing system."""
+
 import tkinter as tk
 from tkinter import ttk
 import socket
@@ -14,11 +16,11 @@ PEER_PORT = 6000
 BUFFER_SIZE = 1024
 HEARTBEAT_INTERVAL = 10 
 running = True  
-boolSeeder = False  # Boolean variable that keeps record of whether the state change from leecher to seeder has occured.
-heartbeat_started = False  # Flag to ensure heartbeat thread is started only once
+boolSeeder = False  # True after a successful download and seeder registration
+heartbeat_started = False  # Ensures the heartbeat thread starts only once
 
 def registerSeeder(filename):
-    '''Function that registers the seeder to the tracker with file hash.'''
+    """Register this peer as a seeder for the given file, including its hash."""
     global heartbeat_started
     try:
         # Compute file hash
@@ -49,11 +51,11 @@ def registerSeeder(filename):
         print('\033[31m'+f"Error registering with tracker: {e}"+'\033[0m')
 
 def heartbeatMessage():
-    '''Function responsible for send hearbeat messages to the tracker, to indicate the 'alive' state.'''
+    """Send periodic heartbeat messages to the tracker while the peer is running."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(5)  # 5 second timeout for each send
     try:
-        while running: # As long as the peer is running, the messages have to be sent.
+        while running:
             try:
                 message = json.dumps({"action": "HEARTBEAT", "port": PEER_PORT}).encode()
                 sock.sendto(message, (TRACKER_IP, TRACKER_PORT))
@@ -67,7 +69,7 @@ def heartbeatMessage():
         print('\033[31m'+"Heartbeat thread closed."+'\033[0m')
 
 def exit():
-    '''Function to quit the program thus disconnecting the peer.'''
+    """Notify the tracker and disconnect this peer."""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)  # 5 second timeout
@@ -81,7 +83,7 @@ def exit():
 
 
 def downloadInterface():
-    '''Simple GUI interface that simulates a loading bar for downloading a file'''
+    """Show a simple progress window during download."""
     loading_root = tk.Tk()
     loading_root.title("Downloading...")
     loading_root.geometry("300x120")
@@ -104,7 +106,7 @@ def downloadInterface():
     loading_root.mainloop()
 
 def requestHosts(filename):
-    '''Function that makes a request to Tracker for seeders hosting a particular file with their hashes.'''
+    """Request the list of seeders for a file from the tracker."""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)  # 5 second timeout
@@ -121,7 +123,7 @@ def requestHosts(filename):
         return []
 
 def handleConnection(conn, addr):
-    '''Handles request for a certain file and sends hash + file chunks to the requested peer'''
+    """Serve a requested file: send hash metadata, then file data in chunks."""
     try:
         conn.settimeout(30)  # 30 second timeout
         filename = conn.recv(BUFFER_SIZE).decode()
@@ -130,7 +132,7 @@ def handleConnection(conn, addr):
             file_hash = compute_file_hash(filename)
             conn.send(json.dumps({"hash": file_hash, "status": "success"}).encode())
             
-            # Small delay to ensure hash is received separately
+            # Brief pause so the peer can read hash metadata before file data
             time.sleep(0.1)
             
             # Send file in chunks
@@ -152,7 +154,7 @@ def handleConnection(conn, addr):
             pass
 
 def startPeer():
-    '''Start the peer thread so it can handle connections.'''
+    """Listen for incoming TCP connections from other peers."""
     global PEER_PORT
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -170,14 +172,14 @@ def startPeer():
         print('\033[31m'+"Peer server closed."+'\033[0m')
 
 def downloadFile(filename):
-    '''Function to download a particular file with integrity verification.'''
+    """Download a file from an available seeder and verify its hash."""
     global boolSeeder
     peers = requestHosts(filename)
     if not peers:
         print('\033[31m'+"No seeders hosting this file."+'\033[0m')
         return False
     
-    downloadInterface() # Simulate download
+    downloadInterface()
     for peer_info in peers:
         try:
             # Handle both old format (tuple) and new format (dict)
@@ -249,7 +251,7 @@ def downloadFile(filename):
     return False
 
 def seederList(filename):
-    '''Returns a list of seeders hosting a particular file with hashes.'''
+    """Print seeders registered for the given file."""
     peers = requestHosts(filename)
     if peers:
         print(f"\nSeeders hosting '{filename}':")
@@ -268,7 +270,7 @@ def seederList(filename):
         print('\033[31m'+f"\nNo seeders found for '{filename}'."+'\033[0m')
 
 def verifyDownloadedFile():
-    '''Manually verify the integrity of a downloaded file.'''
+    """Prompt for a file and expected hash, then verify integrity."""
     filename = input("\nEnter the filename to verify (e.g., [download]filename): ").strip()
     if not os.path.exists(filename):
         print('\033[31m'+f"File not found: {filename}"+'\033[0m')
@@ -286,7 +288,7 @@ def verifyDownloadedFile():
         print('\033[33m'+"The file may have been corrupted or modified."+'\033[0m')
 
 def seederMenu():
-    '''Main menu prompt after state change has occured(Leecher -> Seeder)'''
+    """Menu shown after the client becomes a seeder."""
     while True:
         action = input("\nSeeder Menu:\n1. Seed another file\n2. View active seeding files\n3. Verify downloaded file\n4. Exit\n> ").strip()
         
@@ -316,7 +318,7 @@ def seederMenu():
             print('\033[31m'+"\nInvalid option. Please choose 1, 2, 3, or 4."+'\033[0m')
 
 def leecherMenu():
-    '''Main menu prompt for leecher prior to becoming a seeder.'''
+    """Menu for download and lookup operations before seeding."""
     global boolSeeder
     while True:
         option = input("\nLeecher Menu: \n1. Download file \n2. Get list of seeders \n3. Verify downloaded file \n4. Back \n> ").strip()
@@ -346,7 +348,7 @@ if __name__ == "__main__":
     
     threading.Thread(target=startPeer, daemon=True).start()
     time.sleep(1)
-    activeSeeds = []  # List to keep track of active seeders
+    activeSeeds = []  # Filenames registered or downloaded by this client
     while running:
         if boolSeeder:
             mode = input("\nChoose option:\n1. Seeder\n2. Exit\n> ").strip().lower()

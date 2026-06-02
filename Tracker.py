@@ -1,3 +1,9 @@
+"""
+UDP tracker for the P2P file sharing system.
+
+Maintains file-to-seeder mappings, heartbeats, and per-peer file hashes.
+"""
+
 import socket
 import threading
 import json
@@ -6,9 +12,9 @@ import time
 TRACKER_HOST = '0.0.0.0'
 TRACKER_PORT = 5000
 PEER_TIMEOUT = 30
-peers = {}  # { "filename": [ (PEER_IP, PEER_PORT, file_hash)] }
-peer_heartbeat = {}  # { (peer_ip, peer_port): last_heartbeat_time }
-file_hashes = {}  # { "filename": { (peer_ip, peer_port): hash_value } }
+peers = {}  # filename -> list of (ip, port, file_hash)
+peer_heartbeat = {}  # (ip, port) -> last heartbeat timestamp
+file_hashes = {}  # filename -> {(ip, port): hash}
 
 def handlePeer(sock, addr):
     while True:
@@ -18,7 +24,7 @@ def handlePeer(sock, addr):
             action = message.get("action")
             
             if action == "REGISTER":
-                '''Register seeder to tracker with file hash.'''
+                # Register a seeder and store its file hash
                 filename = message.get("filename")
                 file_hash = message.get("file_hash")
                 peer_ip = peer_addr[0]
@@ -34,7 +40,7 @@ def handlePeer(sock, addr):
                 if not peer_exists:
                     peers[filename].append((peer_ip, peer_port, file_hash))
                     file_hashes[filename][(peer_ip, peer_port)] = file_hash
-                    # Track when this peer registered (use as initial heartbeat)
+                    # Use registration time as the initial heartbeat
                     peer_heartbeat[(peer_ip, peer_port)] = time.time()
                     print('\033[32m'+f"Registered {peer_ip}:{peer_port} for {filename}"+'\033[0m')
                     print('\033[32m'+f"  File Hash (SHA256): {file_hash[:16]}..."+'\033[0m')
@@ -44,7 +50,7 @@ def handlePeer(sock, addr):
                     file_hashes[filename][(peer_ip, peer_port)] = file_hash
 
             elif action == "REQUEST":
-                '''Sends out a list of active seeders with their hashes on request from the peers'''
+                # Return active seeders and hashes for the requested file
                 filename = message.get("filename")
                 available_peers = peers.get(filename, [])
                 # Return peers as list of dicts with peer info and hash
@@ -54,14 +60,14 @@ def handlePeer(sock, addr):
                 print('\033[32m'+f"Sent peer list for {filename} to {peer_addr}"+'\033[0m')
             
             elif action == "HEARTBEAT":
-                '''Periodically sends out alerts of heartbeat meassages.'''
+                # Update last-seen time for the peer
                 peer_ip = peer_addr[0]
                 peer_port = message.get("port")
                 peer_heartbeat[(peer_ip, peer_port)] = time.time()
                 print('\033[32m'+f"Received heartbeat from peer {peer_ip}:{peer_port}"+'\033[0m')
 
             elif action == "EXIT":
-                '''Removes the peer from the list, print a disconnected message.'''
+                # Remove the peer from all file and heartbeat records
                 peer_ip = peer_addr[0]
                 peer_port = message.get("port")
                 for filename in list(peers.keys()):
@@ -84,7 +90,7 @@ def handlePeer(sock, addr):
             print('\033[31m'+f"Error handling peer: {e}"+'\033[0m')
 
 def check_peer_timeout():
-    '''Periodically check for inactive peers and remove them.'''
+    """Remove peers that have not sent a heartbeat within PEER_TIMEOUT."""
     while True:
         try:
             time.sleep(5)  # Check every 5 seconds
@@ -121,7 +127,7 @@ def check_peer_timeout():
             print('\033[31m'+f"Error in timeout check: {e}"+'\033[0m')
 
 def start_tracker():
-    '''Start the tracker main thread'''
+    """Bind the UDP socket and handle incoming peer messages."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((TRACKER_HOST, TRACKER_PORT))
     print('\033[33m'+f"Tracker started on {TRACKER_HOST}:{TRACKER_PORT}"+'\033[0m')

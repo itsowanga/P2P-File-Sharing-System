@@ -1,6 +1,7 @@
 """
-P2P File Sharing System - GUI Client
-A tkinter-based graphical interface for the P2P file sharing system.
+Graphical client for the P2P file sharing system.
+
+Provides seeding, download, and file verification via a tkinter interface.
 """
 
 import tkinter as tk
@@ -344,7 +345,7 @@ class P2PClientGUI:
         status_label = ttk.Label(status_frame, textvariable=self.status_var, foreground=self.accent_color)
         status_label.pack(side=tk.LEFT)
         
-    # ============ Action Methods ============
+    # Action methods
     
     def log(self, message, tag="info"):
         """Add a message to the log"""
@@ -416,10 +417,9 @@ class P2PClientGUI:
             conn.settimeout(30)  # 30 second timeout
             requested_filename = conn.recv(BUFFER_SIZE).decode()
             
-            # Look up the actual file path from our seeded files mapping
+            # Resolve path from seeded_files or the current directory
             actual_path = seeded_files.get(requested_filename)
             
-            # Also check if it exists directly (for files in current directory)
             if not actual_path and os.path.exists(requested_filename):
                 actual_path = requested_filename
             
@@ -429,7 +429,7 @@ class P2PClientGUI:
                 file_hash = compute_file_hash(actual_path)
                 conn.send(json.dumps({"hash": file_hash, "status": "success"}).encode())
                 
-                # Small delay to ensure hash is received separately
+                # Brief pause so the peer can read hash metadata before file data
                 time.sleep(0.1)
                 
                 # Send file
